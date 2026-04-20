@@ -6,6 +6,13 @@
 # Secrets & local env
 .env
 
+# SSH deploy keys — never commit
+c-wald.keys
+c-wald.keys.pub
+*.pem
+id_rsa
+id_ed25519
+
 # Logs
 *.log
 
