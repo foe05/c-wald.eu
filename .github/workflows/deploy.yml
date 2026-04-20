@@ -1,0 +1,82 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: rsync to Hetzner webspace
+    runs-on: ubuntu-latest
+
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      REMOTE_PATH: public_html/c-wald.eu/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify required secrets
+        run: |
+          : "${SSH_HOST:?SSH_HOST secret is not set}"
+          : "${SSH_USER:?SSH_USER secret is not set}"
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "::error::SSH_PRIVATE_KEY secret is not set"
+            exit 1
+          fi
+
+      - name: Configure SSH key and known_hosts
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H -T 10 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          if [ ! -s ~/.ssh/known_hosts ]; then
+            echo "::error::ssh-keyscan failed — could not reach $SSH_HOST"
+            exit 1
+          fi
+
+      - name: Test SSH connection
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=yes \
+              -o BatchMode=yes \
+              -o ConnectTimeout=15 \
+              "$SSH_USER@$SSH_HOST" \
+              "echo 'SSH connection OK'; mkdir -p $REMOTE_PATH"
+
+      # Source is the repo's public_html/c-wald.eu/ directory (trailing slash = contents only).
+      # Repo layout mirrors the server so the site deploys 1:1 into ~/public_html/c-wald.eu/.
+      # The top-level excludes are kept as a belt-and-braces safeguard in case the
+      # source path is ever widened to the repo root.
+      - name: Deploy files via rsync
+        run: |
+          rsync -avz --delete \
+            --human-readable \
+            --chmod=D755,F644 \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes -o BatchMode=yes" \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.gitignore' \
+            --exclude='README.md' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            --exclude='.DS_Store' \
+            public_html/c-wald.eu/ \
+            "$SSH_USER@$SSH_HOST:$REMOTE_PATH"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+      - name: Success
+        run: echo "Deployed successfully"

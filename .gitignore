@@ -3,6 +3,12 @@
 .claude-flow/
 .mcp.json
 
+# Secrets & local env
+.env
+
+# Logs
+*.log
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
