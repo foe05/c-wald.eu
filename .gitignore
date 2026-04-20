@@ -1,0 +1,12 @@
+# Claude Code / claude-flow local tooling — not part of the website
+.claude/
+.claude-flow/
+.mcp.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
