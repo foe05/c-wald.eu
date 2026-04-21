@@ -1,0 +1,24 @@
+# Deny direct web access to server-side logs and config files.
+# send.php writes submissions.log in this directory — it must not be
+# publicly readable via HTTP.
+
+<FilesMatch "\.(log|env|md|ini)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Also block dotfiles just in case any slip through the rsync filter.
+<FilesMatch "^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
