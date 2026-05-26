@@ -174,7 +174,7 @@ $heroImage = 'https://lh3.googleusercontent.com/aida-public/AB6AXuAlX0v3EDzi63Z8
         <ul class="contact-meta">
           <li>
             <span class="contact-icon" aria-hidden="true"><span class="material-symbols-outlined">mail</span></span>
-            <a href="mailto:hallo@c-wald.de">hallo@c-wald.de</a>
+            <a href="mailto:hallo@c-wald.eu">hallo@c-wald.eu</a>
           </li>
         </ul>
       </div>
@@ -217,7 +217,7 @@ $heroImage = 'https://lh3.googleusercontent.com/aida-public/AB6AXuAlX0v3EDzi63Z8
           Send Message
           <span class="material-symbols-outlined" aria-hidden="true">send</span>
         </button>
-        <p class="form-fallback">Or write to <a href="mailto:hallo@c-wald.de">hallo@c-wald.de</a>.</p>
+        <p class="form-fallback">Or write to <a href="mailto:hallo@c-wald.eu">hallo@c-wald.eu</a>.</p>
         <div class="form-status" id="form-status" role="status" aria-live="polite"></div>
       </form>
     </div>
@@ -293,7 +293,7 @@ $heroImage = 'https://lh3.googleusercontent.com/aida-public/AB6AXuAlX0v3EDzi63Z8
       }
     } catch (err){
       status.classList.add('error');
-      status.textContent = 'Network error. Please try again or email hallo@c-wald.de.';
+      status.textContent = 'Network error. Please try again or email hallo@c-wald.eu.';
     }
   });
 })();

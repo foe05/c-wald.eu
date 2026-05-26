@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     respond(false, 'Method not allowed.', 405);
 }
 
-$recipient = 'hallo@c-wald.de';
+$recipient = 'hallo@c-wald.eu';
 
 $allowedTraegerschaft = [
     '', // optional field, empty allowed
@@ -162,7 +162,7 @@ logWaitlistEntry(
 
 if (!$sent) {
     // The log file still has the entry, so the lead isn't lost — but tell the user.
-    respond(false, 'Eintragung gespeichert, aber Mail-Versand fehlgeschlagen. Bitte schreiben Sie an hallo@c-wald.de.', 500);
+    respond(false, 'Eintragung gespeichert, aber Mail-Versand fehlgeschlagen. Bitte schreiben Sie an hallo@c-wald.eu.', 500);
 }
 
 respond(true, 'Danke. Sie stehen auf der Liste.');

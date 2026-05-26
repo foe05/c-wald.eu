@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     respond(false, 'Method not allowed.', 405);
 }
 
-$recipient = 'hallo@c-wald.de';
+$recipient = 'hallo@c-wald.eu';
 
 $allowedSubjects = [
     'MRV Consulting',
@@ -156,7 +156,7 @@ logSubmission(
 );
 
 if (!$sent) {
-    respond(false, 'Mail delivery failed. Please email hallo@c-wald.de directly.', 500);
+    respond(false, 'Mail delivery failed. Please email hallo@c-wald.eu directly.', 500);
 }
 
 respond(true, 'Thanks — we will be in touch shortly.');

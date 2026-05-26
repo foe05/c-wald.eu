@@ -241,7 +241,7 @@ $description = 'C-Wald bündelt kleine und mittlere Waldflächen zu zertifizieru
   <div class="wrap">
     <div>
       C-WALD · Esther Mertens &amp; Johannes Brötz<br>
-      <a href="mailto:hallo@c-wald.de">hallo@c-wald.de</a>
+      <a href="mailto:hallo@c-wald.eu">hallo@c-wald.eu</a>
     </div>
     <nav class="legal" aria-label="Rechtliches">
       <a href="https://c-wald.eu/">c-wald.eu</a>
@@ -284,7 +284,7 @@ $description = 'C-Wald bündelt kleine und mittlere Waldflächen zu zertifizieru
       }
     } catch (err){
       status.classList.add('error');
-      status.textContent = 'Netzwerkfehler. Bitte versuchen Sie es erneut oder schreiben Sie an hallo@c-wald.de.';
+      status.textContent = 'Netzwerkfehler. Bitte versuchen Sie es erneut oder schreiben Sie an hallo@c-wald.eu.';
     }
   });
 })();
