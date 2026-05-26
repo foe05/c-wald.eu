@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H -T 10 "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
           if [ ! -s ~/.ssh/known_hosts ]; then
