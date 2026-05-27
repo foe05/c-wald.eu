@@ -1,4 +1,7 @@
 <?php
+require_once __DIR__ . '/lib/telemetry.php';
+cwald_telemetry_send('cwald.pageview');
+
 $canonical = 'https://c-wald.eu/';
 $title = 'C-Wald — Making European Forests Investable, with Integrity';
 $description = 'C-Wald aggregates fragmented private forest holdings in DACH into certified carbon credit portfolios. MRV-automated, CRCF-ready.';

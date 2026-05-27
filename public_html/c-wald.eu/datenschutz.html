@@ -67,14 +67,27 @@
   </p>
   <p>Our hosting provider processes data on our behalf based on a data processing agreement pursuant to Art. 28 GDPR. For technical reasons, the provider automatically collects and stores information in server log files that your browser transmits (IP address, browser type and version, operating system, referrer URL, time of request, HTTP status). This data is processed on the basis of Art. 6 (1)(f) GDPR (legitimate interest in the secure and stable operation of the website) and deleted after a short period.</p>
 
-  <h2>4. Cookies</h2>
-  <p>We use only strictly necessary technical cookies and <code>localStorage</code> entries required to operate the site (e.g. to remember your cookie consent preference). These do not require consent under § 25 (2) TTDSG.</p>
-  <p>No analytics, tracking, or marketing cookies are currently active. Should this change in the future, consent will be obtained in advance via our consent banner.</p>
+  <h2>4. Reach measurement (server-side telemetry)</h2>
+  <p>We collect a small number of usage events on the server side to understand how the website is used and to improve its content. <strong>No cookies, no <code>localStorage</code> entries, and no JavaScript trackers are used for this.</strong> Because no information is stored on or read from your device, this processing is not subject to § 25 TDDDG.</p>
+  <p>The following events are recorded:</p>
+  <ul>
+    <li><strong>Page views</strong> — when you open <code>c-wald.eu/</code> or <code>c-wald.eu/rostock/</code>.</li>
+    <li><strong>Waitlist signups</strong> — when a submission of the Rostock waitlist form succeeds. Only non-identifying fields are sent (region, type of ownership, area range bucket). Your name, e-mail address, and free-text inputs are <em>not</em> included in the telemetry event.</li>
+  </ul>
+  <p>Each event contains: timestamp, source identifier (<code>c-wald.eu</code>), the URL path (without query string), the user-agent string, and a salted hash of your IP address (HMAC-SHA256 with a server-side secret and a daily rotating salt; the raw IP address never leaves the web server and the hash cannot be reversed).</p>
+  <p>Events are transmitted to <code>log.broetzens.de</code>, operated by the same controller as c-wald.eu.</p>
+  <p><strong>Legal basis:</strong> Art. 6 (1)(f) GDPR (legitimate interest in measuring reach and improving the website).</p>
+  <p><strong>Storage duration:</strong> <span class="placeholder">[PLACEHOLDER: retention period at log.broetzens.de, e.g. 90 days]</span>.</p>
+  <p><strong>Right to object:</strong> You may object to this processing at any time under Art. 21 GDPR by contacting <a href="mailto:hallo@c-wald.eu">hallo@c-wald.eu</a>.</p>
 
-  <h2>5. Fonts (Google Fonts)</h2>
+  <h2>5. Cookies</h2>
+  <p>We use only strictly necessary technical cookies and <code>localStorage</code> entries required to operate the site (e.g. to remember your cookie consent preference). These do not require consent under § 25 (2) TDDDG.</p>
+  <p>No analytics, tracking, or marketing cookies are currently active. Should this change in the future, consent will be obtained in advance via our consent banner. (Reach measurement is performed server-side without cookies — see section 4.)</p>
+
+  <h2>6. Fonts (Google Fonts)</h2>
   <p>This site loads the Inter typeface from Google Fonts (Google Ireland Limited). Connecting to Google servers transmits your IP address. Legal basis: Art. 6 (1)(f) GDPR (legitimate interest in consistent typographic presentation). <span class="placeholder">[PLACEHOLDER: Consider self-hosting fonts to avoid this transfer.]</span></p>
 
-  <h2>6. Your rights</h2>
+  <h2>7. Your rights</h2>
   <p>You have the following rights regarding your personal data:</p>
   <ul>
     <li>Right of access (Art. 15 GDPR)</li>
@@ -87,10 +100,10 @@
   </ul>
   <p>To exercise these rights, please contact us at <a href="mailto:hallo@c-wald.eu">hallo@c-wald.eu</a>.</p>
 
-  <h2>7. Right to lodge a complaint</h2>
+  <h2>8. Right to lodge a complaint</h2>
   <p>You have the right to lodge a complaint with a data protection supervisory authority — in particular in the Member State of your habitual residence, place of work, or place of the alleged infringement — if you believe that the processing of your personal data infringes the GDPR (Art. 77 GDPR).</p>
 
-  <h2>8. Changes to this notice</h2>
+  <h2>9. Changes to this notice</h2>
   <p>We may update this privacy notice to reflect changes in our data processing or legal requirements. The current version is always available at this URL.</p>
 
   <p style="margin-top:3em; font-size:.85rem;">Last updated: <span class="placeholder">[PLACEHOLDER: Date of last update]</span></p>

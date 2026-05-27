@@ -8,6 +8,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
 require_once __DIR__ . '/../lib/mailer.php';
+require_once __DIR__ . '/../lib/telemetry.php';
 
 function respond(bool $success, string $message, int $code = 200): void {
     if (ob_get_level() > 0) { ob_end_clean(); }
@@ -118,9 +119,39 @@ cwald_mail_log(
     ]
 );
 
+// Bucket the free-text "Waldfläche" (e.g. "12 ha", "ca. 250", "1.500 ha")
+// into coarse ranges so the signup event is not individually identifying
+// even when combined with region. Returns 'unknown' if no number found.
+$flaecheBucket = (static function (string $raw): string {
+    // Pull the first number (allow . or , as decimal/thousands).
+    if (!preg_match('~([0-9][0-9.,]*)~', $raw, $m)) {
+        return 'unknown';
+    }
+    $num = (float) str_replace([','], ['.'], str_replace('.', '', $m[1]));
+    if ($num < 5)    return '<5ha';
+    if ($num < 20)   return '5-20ha';
+    if ($num < 50)   return '20-50ha';
+    if ($num < 200)  return '50-200ha';
+    if ($num < 1000) return '200-1000ha';
+    return '1000ha+';
+})($flaeche);
+
 if (!$result['sent']) {
+    cwald_telemetry_send('cwald.waitlist.signup', [
+        'outcome'        => 'mail_failed',
+        'region'         => $region,
+        'traegerschaft'  => $traegerschaft !== '' ? $traegerschaft : 'unspecified',
+        'flaeche_bucket' => $flaecheBucket,
+    ]);
     // The log file still has the entry, so the lead isn't lost — but tell the user.
     respond(false, 'Eintragung gespeichert, aber Mail-Versand fehlgeschlagen. Bitte schreiben Sie an hallo@c-wald.eu.', 500);
 }
+
+cwald_telemetry_send('cwald.waitlist.signup', [
+    'outcome'        => 'ok',
+    'region'         => $region,
+    'traegerschaft'  => $traegerschaft !== '' ? $traegerschaft : 'unspecified',
+    'flaeche_bucket' => $flaecheBucket,
+]);
 
 respond(true, 'Danke. Sie stehen auf der Liste.');

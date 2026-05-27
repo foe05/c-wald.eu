@@ -1,4 +1,7 @@
 <?php
+require_once __DIR__ . '/../lib/telemetry.php';
+cwald_telemetry_send('cwald.pageview');
+
 $canonical = 'https://c-wald.eu/rostock/';
 $title = 'C-Wald · Kohlenstoffmarkt für Ihren Wald · Rostock 2026';
 $description = 'C-Wald bündelt kleine und mittlere Waldflächen zu zertifizierungsfähigen Kohlenstoff-Portfolios. Tragen Sie sich auf die Warteliste ein.';

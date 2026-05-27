@@ -6,6 +6,11 @@
 # Secrets & local env
 .env
 
+# Live telemetry config holds the X-API-Key for log.broetzens.de.
+# Only the .example.php template is committed; the live file is uploaded
+# to the server via SFTP and is excluded from the rsync deploy.
+public_html/c-wald.eu/lib/telemetry-config.php
+
 # SSH deploy keys — never commit
 c-wald.keys
 c-wald.keys.pub
