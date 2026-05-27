@@ -7,33 +7,13 @@ ob_start();
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
+require_once __DIR__ . '/lib/mailer.php';
+
 function respond(bool $success, string $message, int $code = 200): void {
     if (ob_get_level() > 0) { ob_end_clean(); }
     http_response_code($code);
     echo json_encode(['success' => $success, 'message' => $message]);
     exit;
-}
-
-function sanitizeForLog(string $s): string {
-    return str_replace(["\r", "\n"], [' ', ' '], $s);
-}
-
-function logSubmission(array $fields, array $meta): void {
-    $line = sprintf(
-        "[%s] ip=%s mail_ok=%s mail_err=%s\n  name=%s\n  org=%s\n  email=%s\n  subject=%s\n  message=%s\n---\n",
-        gmdate('Y-m-d H:i:s') . 'Z',
-        sanitizeForLog((string)($meta['ip'] ?? 'unknown')),
-        !empty($meta['mail_ok']) ? 'yes' : 'no',
-        sanitizeForLog((string)($meta['mail_err'] ?? '')),
-        sanitizeForLog($fields['name']),
-        sanitizeForLog($fields['organisation']),
-        sanitizeForLog($fields['email']),
-        sanitizeForLog($fields['subject']),
-        sanitizeForLog($fields['message'])
-    );
-    // Intentionally silenced: we don't want log-write failures to break the response.
-    // The .htaccess in the same dir denies web access to *.log files.
-    @file_put_contents(__DIR__ . '/submissions.log', $line, FILE_APPEND | LOCK_EX);
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -100,65 +80,37 @@ $bodyLines = [
     'Submitted: ' . gmdate('Y-m-d H:i:s') . ' UTC',
     'IP:        ' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown'),
 ];
-$body = implode("\r\n", $bodyLines);
 
-// Use the real, existing mailbox as both the From and the envelope sender.
-// A non-existent envelope sender (e.g. no-reply@…) can cause Hetzner's MTA
-// to silently drop the message after mail() has returned true.
-$fromDomain  = 'c-wald.eu';
-$fromAddress = 'hallo@' . $fromDomain;
-$encodedName = '=?UTF-8?B?' . base64_encode('C-Wald Website') . '?=';
-
-// Note: Return-Path is set by the receiving MTA per RFC 5321 — don't set it client-side.
-// The envelope sender is controlled via the '-f' additional parameter below instead.
-$headers = [
-    'From: ' . $encodedName . ' <' . $fromAddress . '>',
-    'Reply-To: ' . $email,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
-    'Content-Transfer-Encoding: 8bit',
-    'X-Mailer: PHP/' . phpversion(),
-];
-
-$encodedSubject = '=?UTF-8?B?' . base64_encode($mailSubject) . '?=';
-
-// Clear any pending PHP error so error_get_last() reflects mail()'s outcome.
-error_clear_last();
-
-// Intentionally NOT using '@' — we want warnings captured by the server's
-// PHP error log so we can see *why* mail() fails (e.g. sendmail missing,
-// -f rejected, disabled_functions, etc).
-$sent = mail(
+$result = cwald_mail_send(
     $recipient,
-    $encodedSubject,
-    $body,
-    implode("\r\n", $headers),
-    '-f' . $fromAddress
+    'C-Wald Website',
+    'hallo@c-wald.eu',
+    $email,
+    $mailSubject,
+    implode("\r\n", $bodyLines)
 );
 
-$lastErr = '';
-if (!$sent) {
-    $e = error_get_last();
-    $lastErr = $e ? (string)($e['message'] ?? '') : '(mail() returned false, no PHP error captured)';
-    error_log('[c-wald send.php] mail() failed: ' . sanitizeForLog($lastErr));
+if (!$result['sent']) {
+    error_log('[c-wald send.php] mail() failed: ' . cwald_sanitize_for_log($result['error']));
 }
 
-logSubmission(
+cwald_mail_log(
+    __DIR__ . '/submissions.log',
     [
-        'name'         => $name,
-        'organisation' => $organisation,
-        'email'        => $email,
-        'subject'      => $subject,
-        'message'      => $message,
+        'name'    => $name,
+        'org'     => $organisation,
+        'email'   => $email,
+        'subject' => $subject,
+        'message' => $message,
     ],
     [
         'ip'       => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
-        'mail_ok'  => $sent,
-        'mail_err' => $lastErr,
+        'mail_ok'  => $result['sent'],
+        'mail_err' => $result['error'],
     ]
 );
 
-if (!$sent) {
+if (!$result['sent']) {
     respond(false, 'Mail delivery failed. Please email hallo@c-wald.eu directly.', 500);
 }
 
