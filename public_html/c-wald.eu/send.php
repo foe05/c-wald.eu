@@ -102,8 +102,11 @@ $bodyLines = [
 ];
 $body = implode("\r\n", $bodyLines);
 
+// Use the real, existing mailbox as both the From and the envelope sender.
+// A non-existent envelope sender (e.g. no-reply@…) can cause Hetzner's MTA
+// to silently drop the message after mail() has returned true.
 $fromDomain  = 'c-wald.eu';
-$fromAddress = 'no-reply@' . $fromDomain;
+$fromAddress = 'hallo@' . $fromDomain;
 $encodedName = '=?UTF-8?B?' . base64_encode('C-Wald Website') . '?=';
 
 // Note: Return-Path is set by the receiving MTA per RFC 5321 — don't set it client-side.
