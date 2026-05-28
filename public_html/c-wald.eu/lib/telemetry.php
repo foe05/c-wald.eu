@@ -4,33 +4,27 @@ declare(strict_types=1);
 /**
  * Shared telemetry helper — server-side event dispatch to log.broetzens.de.
  *
- * Used by:
- *   - index.php            → cwald.pageview         (path=/)
- *   - rostock/index.php    → cwald.pageview         (path=/rostock/)
- *   - rostock/submit.php   → cwald.waitlist.signup  (path=/rostock/)
+ * The log API expects a fixed, minimal JSON schema:
  *
- * Design notes:
+ *   { "tool": "c-wald.eu", "tool_version": "1.0.0",
+ *     "instance": "https://c-wald.eu", "event": "<name>" }
  *
- *   - Fire-and-forget. We register the dispatch on the shutdown handler so
- *     the response is fully sent before we talk to the log API. Under
- *     PHP-FPM we additionally call fastcgi_finish_request() to flush the
- *     response to the browser BEFORE the curl call runs. Under CGI / Apache
- *     module the shutdown handler still runs after PHP closes the response
- *     stream, so the user never waits.
+ * Events emitted by this site:
+ *   - index.php           → site_loaded
+ *   - rostock/index.php   → rostock_loaded
+ *   - rostock/submit.php  → rostock_waitinglist
  *
- *   - Short curl timeouts as a backstop: even on the shutdown handler we
- *     do not want a hung log endpoint to keep the FPM worker tied up.
+ * NO personal data is transmitted: no IP address, no user agent, no form
+ * fields — only the fact that a named event occurred. The payload is
+ * identical for every visitor.
  *
- *   - IP addresses are hashed with HMAC-SHA256 using a server-side pepper
- *     and a daily salt. Same IP yields the same hash within one UTC day
- *     (useful for unique-visitor counts) but cannot be correlated across
- *     days or reversed without the pepper. No raw IP ever leaves the host.
+ * Dispatch is fire-and-forget from the shutdown handler (plus
+ * fastcgi_finish_request() under PHP-FPM), so the user-facing response is
+ * fully flushed before the outbound HTTPS call runs. Short curl timeouts
+ * cap the worst-case worker hold time if the log endpoint is slow.
  *
- *   - Bot user agents are classified in the payload (ua_class = "bot" |
- *     "mobile" | "desktop") rather than dropped, so the log API can filter.
- *
- *   - All errors are sent to the PHP error log only. A failure here must
- *     NEVER affect the user-facing response.
+ * All errors go to the PHP error log only — a failure here must never
+ * affect the user-facing response.
  *
  * Direct web access to this file is blocked by lib/.htaccess.
  */
@@ -44,31 +38,44 @@ if (is_file($cwald_telemetry_config)) {
 }
 unset($cwald_telemetry_config);
 
-if (!defined('CWALD_TELEMETRY_ENABLED'))   define('CWALD_TELEMETRY_ENABLED',  false);
-if (!defined('CWALD_TELEMETRY_DEBUG'))     define('CWALD_TELEMETRY_DEBUG',    false);
-if (!defined('CWALD_TELEMETRY_ENDPOINT'))  define('CWALD_TELEMETRY_ENDPOINT', '');
-if (!defined('CWALD_TELEMETRY_API_KEY'))   define('CWALD_TELEMETRY_API_KEY',  '');
-if (!defined('CWALD_TELEMETRY_IP_PEPPER')) define('CWALD_TELEMETRY_IP_PEPPER', '');
+if (!defined('CWALD_TELEMETRY_ENABLED'))  define('CWALD_TELEMETRY_ENABLED',  false);
+if (!defined('CWALD_TELEMETRY_DEBUG'))    define('CWALD_TELEMETRY_DEBUG',    false);
+if (!defined('CWALD_TELEMETRY_ENDPOINT')) define('CWALD_TELEMETRY_ENDPOINT', 'https://log.broetzens.de/api/log');
+if (!defined('CWALD_TELEMETRY_API_KEY'))  define('CWALD_TELEMETRY_API_KEY',  '');
+
+// Identify this site in the shared log API. These have sensible defaults,
+// so they don't need to live in telemetry-config.php. Bump TOOL_VERSION
+// when the telemetry contract changes.
+if (!defined('CWALD_TELEMETRY_TOOL'))     define('CWALD_TELEMETRY_TOOL',     'c-wald.eu');
+if (!defined('CWALD_TELEMETRY_VERSION'))  define('CWALD_TELEMETRY_VERSION',  '1.0.0');
+if (!defined('CWALD_TELEMETRY_INSTANCE')) define('CWALD_TELEMETRY_INSTANCE', 'https://c-wald.eu');
 
 /**
  * Queue a telemetry event for fire-and-forget dispatch on shutdown.
  *
- * @param string              $event  Event type, e.g. 'cwald.pageview.home'.
- * @param array<string,mixed> $props  Arbitrary event properties. Must be
- *                                    JSON-serialisable; do NOT pass PII.
+ * @param string $event  Event name, e.g. 'site_loaded'.
  */
-function cwald_telemetry_send(string $event, array $props = []): void {
+function cwald_telemetry_send(string $event): void {
     if (!CWALD_TELEMETRY_ENABLED) {
         return;
     }
+    if (CWALD_TELEMETRY_API_KEY === '' || CWALD_TELEMETRY_ENDPOINT === '') {
+        if (CWALD_TELEMETRY_DEBUG) {
+            error_log('[c-wald telemetry] skipped event=' . $event . ' (endpoint or api key not configured)');
+        }
+        return;
+    }
 
-    // Snapshot request context NOW — by the time the shutdown handler runs,
-    // $_SERVER is still populated but we capture explicitly for clarity.
-    $payload = cwald_telemetry_build_payload($event, $props);
+    $payload = [
+        'tool'         => CWALD_TELEMETRY_TOOL,
+        'tool_version' => CWALD_TELEMETRY_VERSION,
+        'instance'     => CWALD_TELEMETRY_INSTANCE,
+        'event'        => $event,
+    ];
 
     register_shutdown_function(static function () use ($payload): void {
-        // Flush the response to the browser before we make the outbound call,
-        // so the user perceives zero added latency.
+        // Flush the response to the browser before the outbound call, so the
+        // user perceives zero added latency.
         if (function_exists('fastcgi_finish_request')) {
             @fastcgi_finish_request();
         }
@@ -77,110 +84,7 @@ function cwald_telemetry_send(string $event, array $props = []): void {
 }
 
 /**
- * Build the JSON-ready payload from the current request context.
- *
- * @param array<string,mixed> $props
- * @return array<string,mixed>
- */
-function cwald_telemetry_build_payload(string $event, array $props): array {
-    $ua    = (string)($_SERVER['HTTP_USER_AGENT'] ?? '');
-    $ip    = cwald_telemetry_client_ip();
-    $path  = cwald_telemetry_request_path();
-
-    // Referrer is optional and may contain a query string with PII on the
-    // OTHER site. Strip query and fragment to be safe.
-    $ref = (string)($_SERVER['HTTP_REFERER'] ?? '');
-    if ($ref !== '') {
-        $parts = @parse_url($ref);
-        if (is_array($parts) && !empty($parts['host'])) {
-            $ref = ($parts['scheme'] ?? 'https') . '://' . $parts['host']
-                 . ($parts['path'] ?? '');
-        } else {
-            $ref = '';
-        }
-    }
-
-    $payload = [
-        'event'     => $event,
-        'timestamp' => gmdate('Y-m-d\TH:i:s\Z'),
-        'source'    => 'c-wald.eu',
-        'path'      => $path,
-        'ip_hash'   => cwald_telemetry_hash_ip($ip),
-        'ua'        => mb_substr($ua, 0, 500),
-        'ua_class'  => cwald_telemetry_classify_ua($ua),
-        // Cast to (object) so an empty props array serialises to {} not [],
-        // keeping the JSON shape stable for the consuming log API.
-        'props'     => (object) $props,
-    ];
-
-    if ($ref !== '') {
-        $payload['referrer'] = mb_substr($ref, 0, 500);
-    }
-
-    return $payload;
-}
-
-/**
- * Best-effort client IP from REMOTE_ADDR.
- *
- * We intentionally ignore X-Forwarded-For: Hetzner shared hosting is not
- * behind a trusted reverse proxy for this site, so XFF can be spoofed.
- */
-function cwald_telemetry_client_ip(): string {
-    return (string)($_SERVER['REMOTE_ADDR'] ?? '');
-}
-
-/**
- * HMAC-SHA256 the IP with a server pepper + UTC day. Truncated to 16 hex
- * chars (64 bits) — plenty to distinguish visitors within a day while
- * limiting log size.
- *
- * Empty IP (CLI / unknown) hashes to a fixed placeholder so we never
- * accidentally emit a hash of the empty string.
- */
-function cwald_telemetry_hash_ip(string $ip): string {
-    if ($ip === '') {
-        return '0000000000000000';
-    }
-    $daySalt = gmdate('Y-m-d');
-    $digest  = hash_hmac('sha256', $ip, CWALD_TELEMETRY_IP_PEPPER . '|' . $daySalt);
-    return substr($digest, 0, 16);
-}
-
-/**
- * Cheap UA classification — 'bot', 'mobile', or 'desktop'.
- *
- * The bot list is intentionally short; the log API can do deeper
- * classification if needed. We just want to flag the obvious cases so
- * top-line pageview numbers aren't grossly inflated.
- */
-function cwald_telemetry_classify_ua(string $ua): string {
-    if ($ua === '') {
-        return 'unknown';
-    }
-    if (preg_match('~bot|crawler|spider|wget|curl|python-requests|httpclient|headlesschrome|slurp|facebookexternalhit|embedly|pingdom|uptimerobot~i', $ua)) {
-        return 'bot';
-    }
-    if (preg_match('~Mobile|Android|iPhone|iPad|iPod|Opera Mini|IEMobile~', $ua)) {
-        return 'mobile';
-    }
-    return 'desktop';
-}
-
-/**
- * Normalize REQUEST_URI to just the path portion, no query string.
- */
-function cwald_telemetry_request_path(): string {
-    $uri = (string)($_SERVER['REQUEST_URI'] ?? '/');
-    $q = strpos($uri, '?');
-    if ($q !== false) {
-        $uri = substr($uri, 0, $q);
-    }
-    return $uri !== '' ? $uri : '/';
-}
-
-/**
- * Actually POST the payload to log.broetzens.de. Runs on shutdown.
+ * POST the payload to log.broetzens.de. Runs on shutdown.
  *
  * @param array<string,mixed> $payload
  */
@@ -202,15 +106,15 @@ function cwald_telemetry_dispatch(array $payload): void {
     }
 
     curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $body,
-        CURLOPT_HTTPHEADER     => [
+        CURLOPT_POST              => true,
+        CURLOPT_POSTFIELDS        => $body,
+        CURLOPT_HTTPHEADER        => [
             'Content-Type: application/json',
             'Accept: application/json',
-            'X-API-Key: ' . CWALD_TELEMETRY_API_KEY,
-            'User-Agent: c-wald-telemetry/1.0 (+https://c-wald.eu)',
+            'X-Api-Key: ' . CWALD_TELEMETRY_API_KEY,
+            'User-Agent: c-wald-telemetry/' . CWALD_TELEMETRY_VERSION . ' (+https://c-wald.eu)',
         ],
-        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_RETURNTRANSFER    => true,
         CURLOPT_CONNECTTIMEOUT_MS => 800,
         CURLOPT_TIMEOUT_MS        => 1500,
         CURLOPT_NOSIGNAL          => true,
@@ -219,7 +123,7 @@ function cwald_telemetry_dispatch(array $payload): void {
     ]);
 
     $response = curl_exec($ch);
-    $status   = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $status   = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $err      = curl_error($ch);
     curl_close($ch);
 
@@ -232,7 +136,7 @@ function cwald_telemetry_dispatch(array $payload): void {
 
     error_log(sprintf(
         '[c-wald telemetry] dispatch failed event=%s status=%d curl_err=%s body=%s',
-        (string)($payload['event'] ?? '?'),
+        (string) ($payload['event'] ?? '?'),
         $status,
         str_replace(["\r", "\n"], ' ', $err),
         is_string($response) ? str_replace(["\r", "\n"], ' ', substr($response, 0, 200)) : ''

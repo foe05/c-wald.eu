@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/lib/telemetry.php';
-cwald_telemetry_send('cwald.pageview');
+cwald_telemetry_send('site_loaded');
 
 $canonical = 'https://c-wald.eu/';
 $title = 'C-Wald — Making European Forests Investable, with Integrity';
