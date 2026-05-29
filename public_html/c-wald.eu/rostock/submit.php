@@ -121,7 +121,7 @@ cwald_mail_log(
 
 // A valid submission reached us — the lead is captured in waitlist.log
 // regardless of the mail outcome, so record the event in either case.
-cwald_telemetry_send('rostock_waitinglist');
+cwald_telemetry_send('rostock_waitinglist', ['POST']);
 
 if (!$result['sent']) {
     // The log file still has the entry, so the lead isn't lost — but tell the user.

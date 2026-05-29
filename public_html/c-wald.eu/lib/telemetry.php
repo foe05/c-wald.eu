@@ -18,6 +18,11 @@ declare(strict_types=1);
  * fields — only the fact that a named event occurred. The payload is
  * identical for every visitor.
  *
+ * Bot / non-human traffic is filtered out before an event is queued:
+ * page views require a GET request (HEAD-based uptime monitors and scanners
+ * are dropped) and the User-Agent is matched against a crawler blocklist.
+ * The User-Agent is inspected locally only and is never part of the payload.
+ *
  * Dispatch is fire-and-forget from the shutdown handler (plus
  * fastcgi_finish_request() under PHP-FPM), so the user-facing response is
  * fully flushed before the outbound HTTPS call runs. Short curl timeouts
@@ -51,14 +56,73 @@ if (!defined('CWALD_TELEMETRY_VERSION'))  define('CWALD_TELEMETRY_VERSION',  '1.
 if (!defined('CWALD_TELEMETRY_INSTANCE')) define('CWALD_TELEMETRY_INSTANCE', 'https://c-wald.eu');
 
 /**
+ * Decide whether the current request looks like a bot / non-human client.
+ *
+ * The User-Agent is inspected locally only — it is NEVER added to the
+ * payload or transmitted anywhere. An empty UA is treated as a bot, since
+ * real browsers practically always send one.
+ *
+ * @param string $ua  Raw User-Agent header.
+ */
+function cwald_telemetry_is_bot(string $ua): bool {
+    if ($ua === '') {
+        return true;
+    }
+    $haystack = strtolower($ua);
+
+    // Substrings that reliably appear in crawler / scanner / scripting /
+    // link-preview clients but not in mainstream browser UAs.
+    static $needles = [
+        'bot', 'crawl', 'spider', 'slurp', 'scrap',
+        'curl', 'wget', 'python', 'go-http', 'java/', 'libwww',
+        'okhttp', 'headless', 'phantom', 'puppeteer', 'playwright',
+        'preview', 'fetch', 'monitor', 'uptime', 'pingdom', 'statuscake',
+        'facebookexternalhit', 'embedly', 'feedfetcher', 'feedburner',
+        'archive.org', 'ia_archiver', 'semrush', 'ahrefs', 'mj12',
+        'dotbot', 'dataprovider', 'censys', 'masscan', 'zgrab', 'nmap',
+    ];
+    foreach ($needles as $needle) {
+        if (strpos($haystack, $needle) !== false) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
  * Queue a telemetry event for fire-and-forget dispatch on shutdown.
  *
- * @param string $event  Event name, e.g. 'site_loaded'.
+ * Page-view events are only counted for real, human-looking GET requests:
+ * HEAD-based uptime monitors / scanners are dropped via the method allowlist,
+ * and well-known bots are dropped via the User-Agent check. The waitlist
+ * submission passes $allowedMethods = ['POST'].
+ *
+ * @param string       $event           Event name, e.g. 'site_loaded'.
+ * @param list<string> $allowedMethods  HTTP methods that may emit this event.
  */
-function cwald_telemetry_send(string $event): void {
+function cwald_telemetry_send(string $event, array $allowedMethods = ['GET']): void {
     if (!CWALD_TELEMETRY_ENABLED) {
         return;
     }
+
+    // Drop non-human traffic before building the payload. Page views must be
+    // GET; HEAD (monitors, scanners) and other methods are ignored.
+    $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? ''));
+    if ($method !== '' && !in_array($method, $allowedMethods, true)) {
+        if (CWALD_TELEMETRY_DEBUG) {
+            error_log('[c-wald telemetry] skipped event=' . $event . ' (method=' . $method . ' not allowed)');
+        }
+        return;
+    }
+
+    // Drop well-known crawlers / scanners / preview bots.
+    if (cwald_telemetry_is_bot((string)($_SERVER['HTTP_USER_AGENT'] ?? ''))) {
+        if (CWALD_TELEMETRY_DEBUG) {
+            error_log('[c-wald telemetry] skipped event=' . $event . ' (bot user-agent)');
+        }
+        return;
+    }
+
     if (CWALD_TELEMETRY_API_KEY === '' || CWALD_TELEMETRY_ENDPOINT === '') {
         if (CWALD_TELEMETRY_DEBUG) {
             error_log('[c-wald telemetry] skipped event=' . $event . ' (endpoint or api key not configured)');
